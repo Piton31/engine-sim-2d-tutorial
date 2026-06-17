@@ -1,0 +1,337 @@
+Engine simulator building engines tutorial
+1. To start, before attempting this, familiarize yourself with the base game's engines and modify them. If you encounter issues, post in #support, and people will help you!
+
+To start building an engine, we must import all of the crucial libraries for the engine to function.
+Start by writing "import "engine_sim.mr"" (the first and last quotations can be removed, but engine_sim.mr needs to remain in quotes.
+
+Then, import your units and constants by writing:
+units units()
+constants constants()
+
+Next, import the impulse library:
+impulse_response_library ir_lib()
+
+Then, label the cycle
+label cycle(2 * 360 * units.deg)
+
+Next, you need to create your ignition wires. There should be as many wires as there are cylinders in your engine. For this tutorial, we will be making a single cylinder engine, so there is only 1 wire.
+private node wires {
+	output wire1: ignition_wire();
+}
+
+Then, we can create a basic description of the cylinder head.
+public node i1_head {
+	input intake_camshaft;
+	input exhaust_camshaft;
+	
+	input chamber_volume: 25 * units.cc;
+	input intake_runner_volume: 58 * units.cc;
+	input intake_runner_cross_section_area: 17 * units.cm2;
+
+	input exhaust_runner_volume: 58 * units.cc;
+	input exhaust_runner_cross_section_area: 17 * units.cm2;
+	
+	input flow_attenuation: 1;
+	input lift_scale: 1;
+	input flip_display: false;
+	
+	alias output __out: head;
+ 
+We can now define our flow samples that dictate how fast air/exhaust can flow depending on the conditions.
+
+function intake_flow(50 * units.thou) intake_flow
+        .add_flow_sample(0 * lift_scale, 0 * flow_attenuation)
+        .add_flow_sample(50 * lift_scale, 40 * flow_attenuation)
+        .add_flow_sample(100 * lift_scale, 80 * flow_attenuation)
+        .add_flow_sample(150 * lift_scale, 125 * flow_attenuation)
+        .add_flow_sample(200 * lift_scale, 160 * flow_attenuation)
+        .add_flow_sample(250 * lift_scale, 190 * flow_attenuation)
+        .add_flow_sample(300 * lift_scale, 210 * flow_attenuation)
+        .add_flow_sample(350 * lift_scale, 225 * flow_attenuation)
+        .add_flow_sample(400 * lift_scale, 230 * flow_attenuation)
+        .add_flow_sample(450 * lift_scale, 240 * flow_attenuation)
+
+	function exhaust_flow(50 * units.thou) exhaust_flow
+        .add_flow_sample(0 * lift_scale, 0 * flow_attenuation)
+        .add_flow_sample(50 * lift_scale, 30 * flow_attenuation)
+        .add_flow_sample(100 * lift_scale, 70 * flow_attenuation)
+        .add_flow_sample(150 * lift_scale, 100 * flow_attenuation)
+        .add_flow_sample(200 * lift_scale, 125 * flow_attenuation)
+        .add_flow_sample(250 * lift_scale, 140 * flow_attenuation)
+        .add_flow_sample(300 * lift_scale, 150 * flow_attenuation)
+        .add_flow_sample(350 * lift_scale, 160 * flow_attenuation)
+        .add_flow_sample(400 * lift_scale, 165 * flow_attenuation)
+        .add_flow_sample(450 * lift_scale, 170 * flow_attenuation)
+
+Now, we can recall our cylinder head and initialize it.
+
+    generic_cylinder_head head(
+        chamber_volume: chamber_volume,
+        intake_runner_volume: intake_runner_volume,
+        intake_runner_cross_section_area: intake_runner_cross_section_area,
+
+        exhaust_runner_volume: exhaust_runner_volume,
+        exhaust_runner_cross_section_area: exhaust_runner_cross_section_area,
+
+        intake_port_flow: intake_flow,
+        exhaust_port_flow: exhaust_flow,
+
+        valvetrain: standard_valvetrain(
+            intake_camshaft: intake_camshaft,
+            exhaust_camshaft: exhaust_camshaft
+        ),
+	    flip_display: flip_display
+	)
+}
+
+Next, we must create the camshaft object.
+
+private node i1_camshaft {
+	input lobe_profile;
+    input intake_lobe_profile: lobe_profile;
+    input exhaust_lobe_profile: lobe_profile;
+    input lobe_seperation: 116 * units.deg;
+    input intake_lobe_center: lobe_seperation;
+    input exhaust_lobe_center: lobe_seperation;
+    input advance: 0 * units.deg;
+    input base_radius: 1 * units.inch;
+    output intake_cam_0: _intake_cam_0;
+    output exhaust_cam_0: _exhaust_cam_0;
+
+    camshaft_parameters params(
+        advance: advance,
+        base_radius: base_radius
+    )
+
+    camshaft _intake_cam_0(params, lobe_profile: intake_lobe_profile)
+    camshaft _exhaust_cam_0(params, lobe_profile: exhaust_lobe_profile)
+
+Now we start getting into the more complicated stuff. We need to create the camshaft lobes and timing. Because we are creating a single cylinder engine, we only need one lobe for both intake and exhaust.
+
+label rot360(360 * units.deg)
+
+    _exhaust_cam_0
+	.add_lobe(rot360 - exhaust_lobe_center + (0.0 / 1.0) * cycle)
+    _intake_cam_0
+	.add_lobe(rot360 + intkae_lobe_center + (0.0 / 1.0) * cycle)
+}
+
+Now we can create the engine object! 
+public node i1 {
+	alias output __out: engine;
+
+	engine engine(
+	name: "i1",
+	starter_torque: 80 * units.lb_ft,
+	starter_speed: 300 * units.rpm,
+        redline: 10000 * units.rpm,
+        fuel: fuel(
+            max_turbulence_effect: 5.5,
+            max_dilution_effect: 1000.0,
+            max_burning_efficiency: 1.0,
+            burning_efficiency_randomness: 0.0
+        ),
+        throttle_gamma: 2.0,
+        hf_gain: 0.01,
+        noise: 0.08,
+        jitter: 0,
+        simulation_frequency: 10000
+    )
+
+We can refer back to the wires as we create the block and rotating assembly parameters
+
+wires wires()
+
+	label stroke(99 * units.mm)
+	label bore(87 * units.mm)
+	label rod_length(152 * units.mm)
+	label rod_mass(570 * units.g)
+	label compression_height(30 * units.mm)
+	label crank_mass(4 * units.lb)
+	label flywheel_mass(5 * units.lb)
+	label flywheel_radius(1.57 * units.inch)
+
+	label crank_moment(disk_moment_of_inertia(mass: crank_mass, radius: stroke))
+	label flywheel_moment(disk_moment_of_inertia(mass: flywheel_mass, radius: flywheel_radius))
+	label other_moment(disk_moment_of_inertia(mass: 1 * units.kg, radius: 1.0 * units.cm))
+
+	crankshaft c0(
+	    throw: stroke / 2,
+	    flywheel_mass: flywheel_mass,
+	    mass: crank_mass,
+	    friction_torque: 0.9 * units.lb_ft,
+	    moment_of_inertia: crank_moment + flywheel_moment + other_moment,
+	    position_x: 0,
+	    position_y: 0,
+	    tdc: 90.0 * units.deg
+	)
+	
+	rod_journal rj0(angle: (0 / 1.0) * cycle)
+	
+	c0
+
+We can now create the piston and connecting rod assemblies and label their parameters
+
+	piston_parameters piston_params(
+	    mass: 145 * units.g,
+	    compression_height: compression_height,
+	    wrist_pin_position: 0.0,
+	    displacement: 0.0
+	)
+	
+	connecting_rod_parameters cr_params(
+	    mass: rod_mass, 
+	    moment_of_inertia: rod_moment_of_inertia(
+            mass: rod_mass,
+            length: rod_length
+        ),
+        center_of_mass: 0.0,
+        length: rod_length
+    )
+
+We can create the intake object! this is crucial because it contains the idle position value for the throttle. This effectively controls the idle speed.
+
+intake intake(
+        plenum_volume: 1 * units.L,
+        plenum_cross_section_area: 10 * units.cm2,
+        intake_flow_rate: k_carb(200.0), 
+        runner_flow_rate: k_carb(80.0),
+        runner_length: 3 * units.m,
+        idle_flow_rate: k_carb(0.0),
+        idle_throttle_plate_position: 0.998,
+        velocity_decay: 0.5
+    )
+
+Now, we can create the exhaust and its values.
+
+exhaust_system_parameters es_params(
+        outlet_flow_rate: k_carb(327.6939),
+        primary_tube_length: 130.1253 * units.cm,
+        primary_flow_rate: k_carb(163.847),
+        velocity_decay: 0.1060261,
+        volume: 2.80694 * units.L
+    )
+
+exhaust_system exhaust0(
+        es_params,
+        audio_volume: 1.0 * 0.25,
+        impulse_response: ir_lib.default_0
+    )
+
+Now we can create the cylinder bank, and because this is a single cylinder engine, there should only be one bank.
+
+	cylinder_bank b0(bank_params, angle: 0 * units.deg)
+    b0
+
+Getting closer! We can now add the piston.
+
+.add_cylinder(
+            piston: piston(piston_params, blowby: k_28inH2O(0.002839816)),
+            connecting_rod: connecting_rod(cr_params),
+            rod_journal: rj0,
+            intake: intake,
+            exhaust_system: exhaust0,
+            ignition_wire: wires.wire1,
+            sound_attenuation: 1.142027
+        )
+
+	engine.add_cylinder_bank(b0)
+	engine.add_crankshaft(c0)
+	
+We can now label the parameters for the camshaft.
+
+	harmonic_cam_lobe intake_lobe(
+	    duration_at_50_thou: 250 * units.deg,
+	    gamma: 1,
+	    lift: 6.5 * units.mm,
+	    steps: 100
+    )
+
+	harmonic_cam_lobe exhaust_lobe(
+	    duration_at_50_thou: 245 * units.deg,
+	    gamma: 1,
+	    lift: 6.0 * units.mm,
+	    steps: 100
+    )
+
+	i1_camshaft camshaft(
+	    lobe_profile: "N/A",
+	    intake_lobe_profile: intake_lobe,
+	    exhaust_lobe_profile: exhaust_lobe,
+	    intake_lobe_center: 116 * units.deg,
+	    exhaust_lobe_center: 116 * units.deg,
+	    base_radius: 11 * units.mm
+	)
+
+We can now finish the head!
+
+b0.set_cylinder_head(
+	    i1_head(
+	        intake_camshaft: camshaft.intake_cam_0,
+	        exhaust_camshaft: camshaft.exhaust_cam_0,
+	        flip_display: false
+	    )
+	)
+
+Next, we can create the timing curve.
+
+	function timing_curve(1000 * units.rpm)
+	timing_curve
+	    .add_sample(0 * units.rpm, 10 * units.deg)
+	    .add_sample(1000 * units.rpm, 10 * units.deg)
+	    .add_sample(2000 * units.rpm, 12 * units.deg)
+	    .add_sample(3000 * units.rpm, 15 * units.deg)
+	    .add_sample(4000 * units.rpm, 18 * units.deg)
+	    .add_sample(5000 * units.rpm, 20 * units.deg)
+	    .add_sample(6000 * units.rpm, 22 * units.deg)
+	    .add_sample(7000 * units.rpm, 24 * units.deg)
+
+	ignition_module ignition_module(
+	    timing_curve: timing_curve,
+	    rev_limit: 10000 * units.rpm,
+	    limiter_duration: 0.01
+    )
+
+We can connect our ignition wires and establish our firing order. Because this is a single cylinder engine, there is only one wire to connect, so there is no firing order.
+
+	ignition_module
+	    .connect_wire(wires.wire1, (0 / 1.0) * cycle)
+
+	engine.add_ignition_module(ignition_module)
+}
+
+Now, we can create the transmission. This will only be one gear for demonstration, but feel free to change or add gears as you like!
+
+
+private node i1_transmission { 
+    alias output __out: transmission;
+
+    transmission transmission(
+        max_clutch_torque: 500 * units.lb_ft
+    )
+	transmission.add_gear(1)
+}
+ Now, we can create a car for our engine to move!
+
+private node car {
+	alias output __out:
+	    vehicle(
+            mass: 100 * units.lb,
+            drag_coefficient: 0.1,
+            cross_sectional_area: (20 * units.inch) * (47 * units.inch),
+            diff_ratio: 24,
+            tire_radius: 8.5 * units.inch,
+            rolling_resistance: 100 * units.N
+	    );
+}
+ Last step, we need to initialize everything in the script!
+
+public node main {
+    run(
+        engine: i1(),
+        transmission: i1_transmission(),
+        vehicle: car()
+    )
+}
+
+main()
